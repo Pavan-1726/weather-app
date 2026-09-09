@@ -1,12 +1,15 @@
 import os
 import sys
+from dotenv import load_dotenv
 import requests
 from datetime import datetime
 
 # ----------------------------------------------------------------------
 # Configuration
+load_dotenv()
+
 # ----------------------------------------------------------------------
-API_KEY ="add new api key here"  # Replace with your OpenWeatherMap API key
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
 BASE_URL = "https://api.openweathermap.org/data/2.5"
 GEO_URL = "https://api.openweathermap.org/geo/1.0/direct"
 
