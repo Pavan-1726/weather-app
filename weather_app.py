@@ -3,6 +3,7 @@ import sys
 from dotenv import load_dotenv
 import requests
 from datetime import datetime
+from flask import Flask, jsonify, render_template_string, request
 
 # ----------------------------------------------------------------------
 # Configuration
@@ -130,6 +131,74 @@ class WeatherApp:
         return "\n".join(lines)
 
 
+WEB_PAGE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Atmos Weather</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--ink:#152432;--muted:#61717b;--paper:#f5f7f3;--line:#dce5e2;--teal:#0d7375;--sun:#f1a348;--white:#fff}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--paper);font-family:'DM Sans',sans-serif}main{max-width:1160px;margin:auto;padding:30px 24px 56px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:54px}.brand{font:700 25px 'Space Grotesk';letter-spacing:-1px}.brand span{color:var(--teal)}.unit-toggle{display:flex;border:1px solid var(--line);border-radius:7px;padding:3px;background:var(--white)}button{border:0;cursor:pointer;font:500 14px 'DM Sans'}.unit{padding:8px 12px;border-radius:5px;color:var(--muted);background:transparent}.unit.active{color:var(--white);background:var(--ink)}.intro{display:grid;grid-template-columns:1fr 1.05fr;gap:64px;align-items:end;margin-bottom:38px}h1{max-width:560px;margin:0;font:600 clamp(42px,6vw,76px)/.98 'Space Grotesk';letter-spacing:-3px}.intro p{max-width:390px;margin:18px 0 0;color:var(--muted);line-height:1.6}form{display:flex;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:10px}input{min-width:0;flex:1;border:0;outline:0;color:var(--ink);background:transparent;font:500 20px 'Space Grotesk'}input::placeholder{color:#aab5b5}.search{width:46px;height:40px;border-radius:5px;color:var(--white);background:var(--teal);font-size:20px}#message{min-height:24px;margin:16px 0;color:#b44e3d}.dashboard{display:none}.dashboard.visible{display:block;animation:rise .45s ease both}.current{display:grid;grid-template-columns:1.2fr .8fr;gap:20px;padding:30px;color:var(--white);background:var(--teal);border-radius:8px}.eyebrow{margin:0 0 8px;color:#acd9d3;font-size:13px;letter-spacing:1.2px;text-transform:uppercase}.place{margin:0;font:600 38px 'Space Grotesk';letter-spacing:-1.5px}.date{margin:7px 0 0;color:#c4e4de}.temperature{align-self:center;font:600 78px/.9 'Space Grotesk';letter-spacing:-5px;text-align:right}.temperature small{font-size:26px;letter-spacing:0;vertical-align:top}.condition{align-self:end;color:#d7eeea;text-transform:capitalize}.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}.metric{padding:22px 14px 22px 0}.metric+.metric{padding-left:22px;border-left:1px solid var(--line)}.metric label{display:block;margin-bottom:7px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px}.metric strong{font:600 20px 'Space Grotesk'}.forecast-head{margin:36px 0 15px}h2{margin:0;font:600 26px 'Space Grotesk'}.forecast{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.day{min-height:155px;display:flex;flex-direction:column;justify-content:space-between;padding:17px;border:1px solid var(--line);border-radius:7px;background:var(--white)}.day-date,.day-desc{color:var(--muted);font-size:13px}.day-icon{color:var(--sun);font-size:27px}.day-temp{font:600 24px 'Space Grotesk'}.day-desc{text-transform:capitalize}@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@media(max-width:700px){main{padding:22px 18px 40px}header{margin-bottom:42px}.intro{display:block}.intro p{margin-bottom:30px}.current{grid-template-columns:1fr 1fr;padding:22px}.place{font-size:29px}.temperature{font-size:58px}.metrics{grid-template-columns:repeat(2,1fr)}.metric+.metric{padding-left:14px;border-left:0}.metric:nth-child(even){padding-left:14px;border-left:1px solid var(--line)}.forecast{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body><main>
+  <header><div class="brand">atmos<span>.</span></div><div class="unit-toggle"><button class="unit active" data-unit="metric">°C</button><button class="unit" data-unit="imperial">°F</button></div></header>
+  <section class="intro"><div><h1>Weather,<br>with clarity.</h1><p>Simple, considered forecasts for wherever you are headed next.</p></div><form id="search-form"><input id="city" placeholder="Search a city..." autocomplete="off" required><button class="search" aria-label="Search">→</button></form></section>
+  <div id="message">Search for a city to see the latest conditions.</div>
+  <section id="dashboard" class="dashboard"><div class="current"><div><p class="eyebrow">Current conditions</p><h2 id="place" class="place"></h2><p id="date" class="date"></p></div><div><div id="temperature" class="temperature"></div><div id="condition" class="condition"></div></div></div><div class="metrics"><div class="metric"><label>Feels like</label><strong id="feels"></strong></div><div class="metric"><label>Humidity</label><strong id="humidity"></strong></div><div class="metric"><label>Wind</label><strong id="wind"></strong></div><div class="metric"><label>Sunrise / sunset</label><strong id="sun"></strong></div></div><div class="forecast-head"><h2>Five day outlook</h2></div><div id="forecast" class="forecast"></div></section>
+</main><script>
+let unit='metric';const $=id=>document.getElementById(id);const icon=main=>({Clear:'○',Clouds:'☁',Rain:'☂',Drizzle:'☂',Snow:'✣',Thunderstorm:'ϟ'}[main]||'○');document.querySelectorAll('.unit').forEach(button=>button.addEventListener('click',()=>{unit=button.dataset.unit;document.querySelectorAll('.unit').forEach(item=>item.classList.remove('active'));button.classList.add('active');if($('city').value)loadWeather($('city').value)}));$('search-form').addEventListener('submit',event=>{event.preventDefault();loadWeather($('city').value)});async function loadWeather(city){$('message').textContent='Reading the sky...';$('dashboard').classList.remove('visible');try{const response=await fetch(`/api/weather?city=${encodeURIComponent(city)}&units=${unit}`);const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load weather.');const{current,location,forecast}=result;const symbol=unit==='metric'?'°C':'°F';$('place').textContent=`${location.name}, ${location.country}`;$('date').textContent=new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});$('temperature').innerHTML=`${Math.round(current.main.temp)}<small>${symbol}</small>`;$('condition').textContent=current.weather[0].description;$('feels').textContent=`${Math.round(current.main.feels_like)}${symbol}`;$('humidity').textContent=`${current.main.humidity}%`;$('wind').textContent=`${current.wind?.speed??'N/A'} ${unit==='metric'?'m/s':'mph'}`;$('sun').textContent=`${formatTime(current.sys.sunrise)} / ${formatTime(current.sys.sunset)}`;$('forecast').innerHTML=forecast.map(day=>`<article class="day"><span class="day-date">${day.date}</span><span class="day-icon">${icon(day.main)}</span><strong class="day-temp">${Math.round(day.temp)}${symbol}</strong><span class="day-desc">${day.description}</span></article>`).join('');$('message').textContent='';$('dashboard').classList.add('visible')}catch(error){$('message').textContent=error.message}}function formatTime(timestamp){return timestamp?new Date(timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'N/A'}
+</script></body></html>
+"""
+
+
+def create_web_app(weather_app):
+    web_app = Flask(__name__)
+
+    @web_app.get("/")
+    def index():
+        return render_template_string(WEB_PAGE)
+
+    @web_app.get("/api/weather")
+    def weather():
+        city = request.args.get("city", "").strip()
+        units = request.args.get("units", "metric")
+        if not city:
+            return jsonify(error="Enter a city name."), 400
+        if units not in ("metric", "imperial", "standard"):
+            units = "metric"
+        try:
+            current, location = weather_app.get_current_weather(city, units)
+            forecast_data, _ = weather_app.get_forecast(city, units)
+            forecast = []
+            seen_dates = set()
+            for entry in forecast_data["list"]:
+                date = datetime.fromtimestamp(entry["dt"]).strftime("%a %d %b")
+                if date in seen_dates:
+                    continue
+                seen_dates.add(date)
+                forecast.append({"date": date, "main": entry["weather"][0]["main"], "description": entry["weather"][0]["description"], "temp": entry["main"]["temp"]})
+                if len(forecast) == 5:
+                    break
+            return jsonify(current=current, location=location, forecast=forecast)
+        except ValueError as error:
+            return jsonify(error=str(error)), 404
+        except requests.exceptions.HTTPError as error:
+            status = error.response.status_code if error.response is not None else 502
+            message = "Invalid API key." if status == 401 else f"Could not find weather for '{city}'." if status == 404 else "Weather service error."
+            return jsonify(error=message), status
+        except requests.exceptions.RequestException:
+            return jsonify(error="The weather service is unavailable right now."), 503
+
+    return web_app
+
+
+def create_server():
+    return create_web_app(WeatherApp(API_KEY))
+
+
 def main():
     print("=" * 45)
     print("        PYTHON WEATHER APPLICATION")
@@ -196,4 +265,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        app = WeatherApp(API_KEY)
+    except ValueError as error:
+        print(f"Setup error: {error}")
+        sys.exit(1)
+
+    if "--cli" in sys.argv:
+        main()
+    else:
+        create_web_app(app).run(debug=True)
